@@ -1,8 +1,14 @@
 package s3
 
 import (
+	"bufio"
+	"bytes"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	aws_s3 "github.com/aws/aws-sdk-go/service/s3"
 	wof_s3 "github.com/whosonfirst/go-whosonfirst-aws/s3"
 	"github.com/whosonfirst/go-whosonfirst-cache"
+	"io"
+	"io/ioutil"
 )
 
 type S3Cache struct {
@@ -18,7 +24,7 @@ func NewS3Cache(dsn string) (cache.Cache, error) {
 		return nil, err
 	}
 
-	conn, err := wof_s3.NewS3Connection(&config)
+	conn, err := wof_s3.NewS3Connection(cfg)
 
 	if err != nil {
 		return nil, err
@@ -33,24 +39,68 @@ func NewS3Cache(dsn string) (cache.Cache, error) {
 
 func (c *S3Cache) Get(key string) (io.ReadCloser, error) {
 
-	return c.conn.Get(key)
+	fh, err := c.conn.Get(key)
+
+	if err != nil {
+
+		aws_err, ok := err.(awserr.Error)
+
+		if ok {
+			switch aws_err.Code() {
+			case aws_s3.ErrCodeNoSuchKey:
+				err = cache.CacheMiss{}
+			default:
+				// pass
+			}
+		}
+		return nil, err
+	}
+
+	return fh, nil
 }
 
 func (c *S3Cache) Set(key string, fh io.ReadCloser) (io.ReadCloser, error) {
 
-	// PLEASE MAKE ME BETTER - presumably with some
-	// confusing io.WahWah stuff (20180615/thisisaaronland)
+	// this is not awesome but until we update all the things (and
+	// in particular all the go-whosonfirst-readwrite stuff) to be
+	// ReadSeekCloser thingies it's what necessary...
+	// (20180617/thisisaaronland)
 
-	err := c.conn.Put(key, fh)
+	var b bytes.Buffer
+	wr := bufio.NewWriter(&b)
+
+	io.Copy(wr, fh)
+	wr.Flush()
+
+	r := bytes.NewReader(b.Bytes())
+
+	err := c.conn.Put(key, ioutil.NopCloser(r))
 
 	if err != nil {
 		return nil, err
 	}
 
-	return c.Get(key)
+	r.Reset(b.Bytes())
+	return ioutil.NopCloser(r), nil
 }
 
 func (c *S3Cache) Unset(key string) error {
 
 	return c.conn.Delete(key)
+}
+
+func (c *S3Cache) Size() int64 {
+	return -1
+}
+
+func (c *S3Cache) Hits() int64 {
+	return -1
+}
+
+func (c *S3Cache) Misses() int64 {
+	return -1
+}
+
+func (c *S3Cache) Evictions() int64 {
+	return -1
 }
