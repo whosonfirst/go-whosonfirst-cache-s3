@@ -2,12 +2,14 @@ package cache
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	_ "log"
 )
 
 type Cache interface {
+	Name() string
 	Get(string) (io.ReadCloser, error)
 	Set(string, io.ReadCloser) (io.ReadCloser, error)
 	Unset(string) error
@@ -18,16 +20,20 @@ type Cache interface {
 }
 
 type CacheMiss struct {
+	error string
 }
 
 func (m CacheMiss) Error() string {
-	return "MISS"
+
+	return fmt.Sprintf("CACHE MISS %s", m.error)
 }
 
 func IsCacheMiss(e error) bool {
 
 	switch e.(type) {
 	case *CacheMiss:
+		return true
+	case CacheMiss:
 		return true
 	default:
 		// pass
@@ -36,24 +42,18 @@ func IsCacheMiss(e error) bool {
 	return false
 }
 
-type BytesReadCloser struct {
-	io.Reader
+func NewReadCloser(b []byte) io.ReadCloser {
+	r := bytes.NewReader(b)
+	return ioutil.NopCloser(r)
 }
 
-func (BytesReadCloser) Close() error { return nil }
-
-func NewBytesReadCloserFromString(s string) BytesReadCloser {
-	return NewBytesReadCloser([]byte(s))
-}
-
-func NewBytesReadCloser(body []byte) BytesReadCloser {
-	r := bytes.NewReader(body)
-	return BytesReadCloser{r}
+func NewReadCloserFromString(s string) io.ReadCloser {
+	return NewReadCloser([]byte(s))
 }
 
 func SetString(c Cache, k string, v string) (string, error) {
 
-	r := NewBytesReadCloserFromString(v)
+	r := NewReadCloserFromString(v)
 	fh, err := c.Set(k, r)
 
 	if err != nil {
