@@ -1,5 +1,9 @@
 # go-whosonfirst-cache-s3
 
+## Important
+
+This package has been officially deprecated. Please use the [go-cache-blob](https://github.com/whosonfirst/go-cache-blob) package instead.
+
 ## Install
 
 You will need to have both `Go` (specifically version Go [1.12](https://golang.org/dl/) or higher) and the `make` programs installed on your computer. Assuming you do just type:
